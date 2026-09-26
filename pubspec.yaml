@@ -1,0 +1,14 @@
+name: osmo360_shutter_app
+description: Foreground walking photography controller for DJI Osmo 360.
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+flutter:
+  uses-material-design: true
