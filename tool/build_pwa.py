@@ -26,7 +26,8 @@ self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET'||u.origin!==scope.origin||!u.pathname.startsWith(scope.pathname))return;
   const relative=u.pathname.slice(scope.pathname.length);
   if(event.request.mode==='navigate') {
-    event.respondWith(caches.open(CACHE).then(async c=>(await c.match(new URL('index.html',scope).href))||fetch(event.request)));
+    const entry=FILES.includes(relative) ? relative : 'index.html';
+    event.respondWith(caches.open(CACHE).then(async c=>(await c.match(new URL(entry,scope).href))||fetch(event.request)));
     return;
   }
   if(!FILES.includes(relative))return;

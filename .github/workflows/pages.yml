@@ -23,7 +23,7 @@ jobs:
       - run: dart format lib test
       - run: flutter analyze
       - run: flutter test
-      - run: node --test test/web_bridge_test.cjs
+      - run: node --test test/*_test.cjs
       - run: python3 tool/make_icons.py
       - run: flutter build web --release --base-href /osmo360-shutter-app/ --pwa-strategy=none --no-web-resources-cdn
       - run: python3 tool/build_pwa.py
@@ -45,12 +45,18 @@ jobs:
     needs: web
     runs-on: ubuntu-24.04
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify published PWA assets
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: python3 tool/verify_public.py
