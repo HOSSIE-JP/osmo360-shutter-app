@@ -34,5 +34,5 @@ assert "const entry=FILES.includes(relative)" in worker
 assert 'map.html' in worker and 'main.dart.js' in worker
 assert len(get('main.dart.js')) > 10000
 assert b'flutter' in get('flutter_bootstrap.js')
-assert b'Google' in get('map.html')
+assert b'maps.googleapis.com/maps/api/js' in get('map.html')
 print('PASS: public HTTPS entry, manifest, all PWA icons, worker, Flutter bundle and map page')
