@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "Osmo 360 Shutter",
+  "short_name": "Osmo Shutter",
+  "description": "歩いて、止まって、360°を残す。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1119",
+  "theme_color": "#0b1119",
+  "orientation": "any",
+  "icons": [
+    {"src":"icons/Icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"icons/Icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"icons/Icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ],
+  "categories": ["photography", "utilities"]
+}
