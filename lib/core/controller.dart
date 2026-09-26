@@ -302,7 +302,7 @@ class AppController extends ChangeNotifier {
     'shots':engine.shots.map((s)=>s.toJson()).toList(),'track':engine.track.map((f)=>f.toJson()).toList(),
     'logs':logs.toList(),'savedFileVerified':false};
   Future<void> persist({bool required=false}) async {
-    if(sessionId.isEmpty)return;
+    if(sessionId.isEmpty || !engine.active)return;
     final value=jsonEncode(snapshot());
     final write=_persistTail.catchError((Object _){}).then((_)=>bridge.call('save',{'key':'current','value':value}));
     _persistTail=write.then<void>((_){}).catchError((Object _){});
@@ -385,7 +385,12 @@ class AppController extends ChangeNotifier {
       if(engine.active)'currentSession':snapshot()};
     await bridge.call('export',{'name':'osmo360-project-$selectedProjectId.json','content':const JsonEncoder.withIndent('  ').convert(data),'mime':'application/json'});
   }
-  Future<void> deleteSession(String id) async { sessions.removeWhere((s)=>s['id']==id); await _saveHistory(); notifyListeners(); }
+  Future<void> deleteSession(String id) async {
+    if(engine.active && sessionId==id)return;
+    sessions.removeWhere((s)=>s['id']==id);
+    if(sessionId==id){sessionId='';engine.resetSession();}
+    await _saveHistory();notifyListeners();
+  }
   Future<void> install() async {
     try { final r=await bridge.call('install'); if(r is Map && r['hint']!=null) error=r['hint']; }
     catch(e) { fail('$e'); } notifyListeners();

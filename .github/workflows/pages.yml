@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -20,12 +20,20 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - run: dart format lib test
       - run: flutter analyze
       - run: flutter test
       - run: node --test test/web_bridge_test.cjs
       - run: python3 tool/make_icons.py
       - run: flutter build web --release --base-href /osmo360-shutter-app/ --pwa-strategy=none --no-web-resources-cdn
       - run: python3 tool/build_pwa.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-dart-sources
+          path: |
+            lib/
+            test/
+            pubspec.lock
       - uses: actions/upload-artifact@v4
         with:
           name: flutter-web-release
@@ -35,7 +43,7 @@ jobs:
           path: build/web
   deploy:
     needs: web
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pages: write
       id-token: write

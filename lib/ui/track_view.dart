@@ -51,6 +51,7 @@ class _TrackViewState extends State<TrackView> {
     const SizedBox(height:12),const Wrap(spacing:16,runSpacing:6,children:[
       _Legend(cyan,'移動軌跡'),_Legend(Color(0xffd5f7a5),'撮影動作検知'),_Legend(Color(0xffffc77d),'要求・結果不明')]),
     const SizedBox(height:8),const Text('撮影地点はアプリの要求ログです。GPS誤差を含みます。',style:TextStyle(fontSize:11,color:Color(0xff8598a8))),
+    if(threeD) const Text('高さは開始点からの差分。高度がない点は基準平面に表示します。',style:TextStyle(fontSize:11,color:Color(0xff8598a8))),
   ]);
 }
 class _Legend extends StatelessWidget {
@@ -73,20 +74,32 @@ class RoutePainter extends CustomPainter {
     final points=[...track,...shots.where((s)=>s.fix!=null).map((s)=>s.fix!),if(current!=null)current!];
     if(points.isEmpty)return;
     final origin=points.first;
-    Offset local(GeoFix p) {
+    List<double> meters(GeoFix p) {
       final east=(p.lon-origin.lon)*111320*math.cos(origin.lat*math.pi/180);
       final north=(p.lat-origin.lat)*111320;
       final z=p.altitude!=null&&origin.altitude!=null?p.altitude!-origin.altitude!:0.0;
+      return [east,north,z];
+    }
+    Offset rotate(double east,double north,double z) {
       final rotatedX=east*math.cos(yaw)-north*math.sin(yaw);
       final rotatedY=east*math.sin(yaw)+north*math.cos(yaw);
       return threeD?Offset(rotatedX,-rotatedY*math.sin(pitch)-z*math.cos(pitch)):Offset(east,-north);
     }
+    Offset local(GeoFix p) { final v=meters(p);return rotate(v[0],v[1],v[2]); }
     final coords=points.map(local).toList();
     var minX=coords.map((p)=>p.dx).reduce(math.min), maxX=coords.map((p)=>p.dx).reduce(math.max);
     var minY=coords.map((p)=>p.dy).reduce(math.min), maxY=coords.map((p)=>p.dy).reduce(math.max);
     final width=math.max(20.0,maxX-minX),height=math.max(20.0,maxY-minY);
-    final scale=math.min((size.width-90)/width,(size.height-90)/height)*(threeD?zoom:1);
-    final center=Offset((minX+maxX)/2,(minY+maxY)/2);
+    var scale=math.min((size.width-90)/width,(size.height-90)/height);
+    var center=Offset((minX+maxX)/2,(minY+maxY)/2);
+    if(threeD) {
+      // Keep a stable world-space centre and scale while rotating the view.
+      final xyz=points.map(meters).toList();
+      final midpoint=List.generate(3,(axis)=>(xyz.map((v)=>v[axis]).reduce(math.min)+xyz.map((v)=>v[axis]).reduce(math.max))/2);
+      final radius=math.max(10.0,xyz.map((v)=>math.sqrt(List.generate(3,(axis)=>math.pow(v[axis]-midpoint[axis],2)).reduce((a,b)=>a+b))).reduce(math.max));
+      scale=math.min(size.width-90,size.height-90)/(radius*2)*zoom;
+      center=rotate(midpoint[0],midpoint[1],midpoint[2]);
+    }
     Offset project(GeoFix p)=>(local(p)-center)*scale+Offset(size.width/2,size.height/2);
     if(track.length>1) {
       final path=Path()..moveTo(project(track.first).dx,project(track.first).dy);

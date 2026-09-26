@@ -11,3 +11,6 @@ android/key.properties
 *.iml
 captures/
 *.log
+/android/
+__pycache__/
+*.pyc
