@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../platform/bridge_interface.dart';
 import 'capture_engine.dart';
@@ -16,18 +15,23 @@ class AppController extends ChangeNotifier {
   final decoder=FrameDecoder();
   final List<Map<String,dynamic>> logs=[];
   List<Map<String,dynamic>> sessions=[];
+  List<Map<String,dynamic>> projects=[];
+  String selectedProjectId='', mapsApiKey='';
+  String get projectName=>projects.where((p)=>p['id']==selectedProjectId).map((p)=>p['name'].toString()).firstOrNull??'プロジェクトを作成';
+  List<Map<String,dynamic>> get projectSessions=>sessions.where((s)=>s['projectId']==selectedProjectId).toList();
   Map<String,dynamic> capabilities={};
   List<int> identity=[];
   String cameraName='未接続', connectionLabel='カメラを接続', error='', modeDescription='';
   String sessionId='', storageError='';
   int verificationCode=0, _sequence=0, _generation=0, _lastGps=-10000, _lastSave=0;
   int cameraId=0xff66;
-  bool connecting=false, demo=false, _gpsSending=false, _shutterSending=false, _saving=false;
+  bool connecting=false, demo=false, _gpsSending=false, _shutterSending=false;
   bool _disposed=false;
   Timer? _timer, _handshakeTimer;
   StreamSubscription? _subscription;
   Completer<void>? _authorized;
   Future<void> _writeTail=Future.value();
+  Future<void> _persistTail=Future.value();
   final Map<int, Completer<Frame>> _pending={};
   CapturePhase? _lastPhase;
   Settings get settings=>engine.settings;
@@ -47,12 +51,19 @@ class AppController extends ChangeNotifier {
       }
       final history=await bridge.call('load',{'key':'sessions'});
       if(history is String) sessions=(jsonDecode(history) as List).map((e)=>Map<String,dynamic>.from(e)).toList();
+      final projectData=await bridge.call('load',{'key':'projects'});
+      if(projectData is String) projects=(jsonDecode(projectData) as List).map((p)=>Map<String,dynamic>.from(p)).toList();
+      selectedProjectId=(await bridge.call('load',{'key':'selectedProject'})) as String? ?? '';
+      mapsApiKey=(await bridge.call('load',{'key':'mapsApiKey'})) as String? ?? '';
+      if(projects.isEmpty) await createProject('はじめての撮影','');
+      if(!projects.any((p)=>p['id']==selectedProjectId)) selectedProjectId=projects.first['id'];
+      for(final s in sessions) { s['projectId'] ??= selectedProjectId; }
       // Active sessions are never automatically resumed after reload/crash.
       final current=await bridge.call('load',{'key':'current'});
       if(current is String) {
         final recovered=Map<String,dynamic>.from(jsonDecode(current));
         if(recovered['id']!=null && !sessions.any((s)=>s['id']==recovered['id'])) {
-          recovered['interrupted']=true;
+          recovered['interrupted']=true; recovered['projectId'] ??= selectedProjectId;
           for(final shot in (recovered['shots'] as List? ?? [])) {
             if(shot['result']=='requested') { shot['result']='unknown'; shot['note']='アプリ終了時に未確定'; }
           }
@@ -76,13 +87,18 @@ class AppController extends ChangeNotifier {
     catch(e) { log('warning','通知できません: $e'); }
   }
   int nextSequence()=>_sequence=(_sequence+1)&0xffff;
-  Future<void> _write(Frame frame) {
+  Future<void> _write(Frame frame,{bool Function()? allowed}) {
     final gen=_generation;
     final work=_writeTail.catchError((Object _){}).then((_) async {
       if(gen!=_generation || !engine.connected) throw StateError('送信前に切断されました');
+      if(allowed!=null && !allowed())throw StateError('送信条件が変わったため中止しました');
       log('tx','${frame.set.toRadixString(16)}/${frame.id.toRadixString(16)}',
         {'sequence':frame.sequence,'type':frame.type,'hex':_hex(frame.encode())});
-      await bridge.call('write',{'bytes':frame.encode().toList()}).timeout(const Duration(seconds:4));
+      try {
+        await bridge.call('write',{'bytes':frame.encode().toList()}).timeout(const Duration(seconds:4));
+      } on TimeoutException {
+        _generation++;await bridge.call('disconnect').catchError((Object _){});rethrow;
+      }
     });
     _writeTail=work;
     return work;
@@ -211,8 +227,9 @@ class AppController extends ChangeNotifier {
   }
   Future<void> startSession() async {
     if(engine.active) return;
+    if(selectedProjectId.isEmpty){fail('プロジェクトを作成してください');return;}
     if(engine.shots.isNotEmpty || engine.track.isNotEmpty) { await _archive(); engine.resetSession(); }
-    sessionId=utc.toIso8601String(); engine.start(); error='';
+    sessionId=utc.toIso8601String(); logs.clear(); engine.start(); error='';
     if(demo) _demoStatus();
     else {
       try { await bridge.call('startSensors'); }
@@ -224,13 +241,13 @@ class AppController extends ChangeNotifier {
     if(engine.pending!=null) engine.resolveUnknown('セッション停止時に状態が未確定');
     engine.stop();
     if(!demo) await bridge.call('stopSensors').catchError((Object e)=>log('warning','$e'));
-    await _archive(); await bridge.call('remove',{'key':'current'}).catchError((Object _){});
+    await _archive(); await _persistTail; await bridge.call('remove',{'key':'current'}).catchError((Object _){});
     notifyListeners();
   }
   Future<void> pauseOrResume() async {
     if(engine.paused) {
       engine.resume();
-      if(!demo) await bridge.call('keepAwake').catchError((Object e)=>log('warning','$e'));
+      if(!demo) await bridge.call('startSensors').catchError((Object e)=>log('warning','$e'));
     } else { engine.pause('手動で一時停止しました'); }
     await persist(); notifyListeners();
   }
@@ -261,31 +278,39 @@ class AppController extends ChangeNotifier {
     final gen=_generation;
     try {
       // Persist the reservation before device IO; crashes never cause replay.
-      await persist();
-      if(!engine.visible || engine.paused || gen!=_generation) throw StateError('送信前に中止');
+      await persist(required:true);
+      if(!engine.active || engine.pending!=shot || !engine.visible || engine.paused || gen!=_generation) throw StateError('送信前に中止');
       if(demo) {
         shot.acknowledged=true;
         engine.status(CameraStatus(mode:0x3f,state:3,battery:87,remainingPhotos:900,capacityMb:32768,
           temperature:0,power:0,countdownMs:0,receivedAt:now+1));
       } else {
         shot.sequence=nextSequence();
-        await _write(Frame(0,0x11,shot.sequence!,2,Uint8List.fromList([1,1,0,0])));
+        await _write(Frame(0,0x11,shot.sequence!,2,Uint8List.fromList([1,1,0,0])),allowed:()=>
+          engine.active && engine.pending==shot && engine.visible && !engine.paused &&
+          engine.camera!=null && engine.camera!.ready && now-engine.camera!.receivedAt<=2500 &&
+          (!settings.requireGps || engine.gpsValid(now,utc)) &&
+          (manual || (engine.motionFresh(now) && engine.gyro<=settings.gyroThreshold && engine.acceleration<=settings.accelerationThreshold))); 
       }
       await feedback('撮影要求を送りました');
     } catch(e) { engine.resolveUnknown('撮影要求の結果不明: $e。再送していません'); fail('$e'); }
     finally { _shutterSending=false; await persist(); notifyListeners(); }
   }
-  Map<String,dynamic> snapshot() => {'schema':1,'id':sessionId,'demo':demo,
+  Map<String,dynamic> snapshot() => {'schema':2,'id':sessionId,'demo':demo,'projectId':selectedProjectId,'projectName':projectName,
     'savedAt':utc.toIso8601String(),'settings':settings.toJson(),'cameraName':cameraName,
     'modeDescription':modeDescription,'steps':engine.steps,'estimatedDistanceM':engine.totalDistance,
     'shots':engine.shots.map((s)=>s.toJson()).toList(),'track':engine.track.map((f)=>f.toJson()).toList(),
     'logs':logs.toList(),'savedFileVerified':false};
-  Future<void> persist() async {
-    if(_saving || sessionId.isEmpty) return;
-    _saving=true;
-    try { await bridge.call('save',{'key':'current','value':jsonEncode(snapshot())}); }
-    catch(e) { storageError='端末への保存に失敗しました。履歴を書き出してください: $e'; engine.pause('保存容量を確認してください'); }
-    finally { _saving=false; }
+  Future<void> persist({bool required=false}) async {
+    if(sessionId.isEmpty)return;
+    final value=jsonEncode(snapshot());
+    final write=_persistTail.catchError((Object _){}).then((_)=>bridge.call('save',{'key':'current','value':value}));
+    _persistTail=write.then<void>((_){}).catchError((Object _){});
+    try { await write; }
+    catch(e) {
+      storageError='端末への保存に失敗しました。履歴を書き出してください: $e';engine.pause('保存容量を確認してください');
+      if(required)rethrow;
+    }
   }
   Future<void> saveSettings() async {
     try { await bridge.call('save',{'key':'settings','value':jsonEncode(settings.toJson())}); }
@@ -293,8 +318,6 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
   Future<void> _saveHistory() async {
-    // Keep the last 10 sessions; exports support long-term storage.
-    if(sessions.length>10) sessions=sessions.take(10).toList();
     await bridge.call('save',{'key':'sessions','value':jsonEncode(sessions)});
   }
   Future<void> _archive() async {
@@ -321,6 +344,46 @@ class AppController extends ChangeNotifier {
     } else { content=const JsonEncoder.withIndent('  ').convert(s); mime='application/json'; }
     try { await bridge.call('export',{'name':'osmo360-$stamp.$format','content':content,'mime':mime}); }
     catch(e) { fail('書き出し: $e'); }
+  }
+  Future<void> _saveProjects() async {
+    await bridge.call('save',{'key':'projects','value':jsonEncode(projects)});
+    await bridge.call('save',{'key':'selectedProject','value':selectedProjectId});
+  }
+  Future<void> createProject(String name,String description) async {
+    if(engine.active) {fail('セッションを終了してからプロジェクトを作成してください');return;}
+    if(name.trim().isEmpty) return;
+    selectedProjectId='p-${utc.microsecondsSinceEpoch}';
+    projects.add({'id':selectedProjectId,'name':name.trim(),'description':description.trim(),'createdAt':utc.toIso8601String(),'updatedAt':utc.toIso8601String()});
+    engine.resetSession();sessionId='';
+    await _saveProjects();notifyListeners();
+  }
+  Future<void> editProject(String id,String name,String description) async {
+    if(name.trim().isEmpty)return;
+    final p=projects.firstWhere((p)=>p['id']==id);
+    p['name']=name.trim();p['description']=description.trim();p['updatedAt']=utc.toIso8601String();
+    await _saveProjects();notifyListeners();
+  }
+  Future<void> selectProject(String id) async {
+    if(engine.active || !projects.any((p)=>p['id']==id)) return;
+    if(sessionId.isNotEmpty) await _archive();
+    selectedProjectId=id;sessionId='';engine.resetSession();
+    await _saveProjects();notifyListeners();
+  }
+  Future<void> deleteProject(String id) async {
+    if(engine.active){fail('セッションを終了してください');return;}
+    sessions.removeWhere((s)=>s['projectId']==id);projects.removeWhere((p)=>p['id']==id);
+    if(selectedProjectId==id){selectedProjectId=projects.isEmpty?'':projects.first['id'];sessionId='';engine.resetSession();}
+    await _saveHistory();await _saveProjects();await bridge.call('remove',{'key':'current'});notifyListeners();
+  }
+  Future<void> saveMapKey(String key) async {
+    mapsApiKey=key.trim();
+    await bridge.call('save',{'key':'mapsApiKey','value':mapsApiKey});notifyListeners();
+  }
+  Future<void> exportProject() async {
+    final project=projects.where((p)=>p['id']==selectedProjectId).firstOrNull;
+    final data={'schema':2,'project':project,'sessions':projectSessions,
+      if(engine.active)'currentSession':snapshot()};
+    await bridge.call('export',{'name':'osmo360-project-$selectedProjectId.json','content':const JsonEncoder.withIndent('  ').convert(data),'mime':'application/json'});
   }
   Future<void> deleteSession(String id) async { sessions.removeWhere((s)=>s['id']==id); await _saveHistory(); notifyListeners(); }
   Future<void> install() async {

@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body,#map{height:100%;margin:0;background:#141d27;color:#b5c6d4;font:13px system-ui}#status{position:absolute;z-index:3;left:10px;top:10px;background:#141d27;padding:10px;border-radius:8px;max-width:80%}#fit{position:absolute;bottom:30px;left:12px;z-index:3;background:#141d27;color:#65e0db;border:1px solid #526575;border-radius:8px;padding:10px}</style></head>
+<body><div id="map"></div><div id="status">地図を準備しています…</div><button id="fit" type="button">軌跡に合わせる</button><script>
+'use strict';
+let config=null, map=null, line=null, markers=[], loading=false, fitted=false;
+const status=document.getElementById('status');
+window.gm_authFailure=()=>{status.textContent='APIキー・Maps JavaScript APIの有効化・課金・サイト制限を確認してください。相対座標ビューは引き続き利用できます。';status.hidden=false;};
+function position(p){return {lat:p.lat,lng:p.lon};}
+function fit(){if(!map||!config)return;const points=[...(config.track||[]),...(config.shots||[]).filter(s=>s.fix).map(s=>s.fix)];if(config.current)points.push(config.current);if(!points.length)return;const bounds=new google.maps.LatLngBounds();for(const p of points)bounds.extend(position(p));map.fitBounds(bounds,45);if(points.length===1)map.setZoom(18);}
+async function draw(){
+ if(!map||!config)return;
+ line.setPath((config.track||[]).map(position));for(const m of markers)m.map=null;markers=[];
+ const {AdvancedMarkerElement}=await google.maps.importLibrary('marker');
+ for(const s of (config.shots||[]).filter(s=>s.fix)){
+   const label=document.createElement('div');label.textContent=String(s.number);label.style.cssText=`border-radius:50%;padding:6px 9px;background:${s.result==='actionObserved'?'#d5f7a5':'#ffc77d'};color:#102029;font:600 12px system-ui;border:2px solid #20353c`;
+   markers.push(new AdvancedMarkerElement({map,position:position(s.fix),content:label,title:`#${s.number} ${s.at} ${s.result}`}));
+ }
+ if(config.current)markers.push(new AdvancedMarkerElement({map,position:position(config.current),title:'現在位置'}));
+ if(!fitted && ((config.track||[]).length||config.current)){fit();fitted=true;}
+}
+window.initMap=async()=>{
+ const {Map}=await google.maps.importLibrary('maps');
+ map=new Map(document.getElementById('map'),{center:{lat:35,lng:139},zoom:16,mapId:'DEMO_MAP_ID',mapTypeControl:true,streetViewControl:false,fullscreenControl:false,gestureHandling:'cooperative'});
+ line=new google.maps.Polyline({map,strokeColor:'#00a9a4',strokeOpacity:1,strokeWeight:3});
+ status.hidden=true;await draw();
+};
+window.osmoSetMapConfig=next=>{
+ if(!next||typeof next.key!=='string'||!next.key)return;
+ if(config && config.key!==next.key){status.hidden=false;status.textContent='キーを変更しました。地図タブを開き直してください。';return;}
+ config=next;
+ if(map){draw();return;}if(loading)return;loading=true;
+ const script=document.createElement('script');script.async=true;
+ script.src='https://maps.googleapis.com/maps/api/js?'+new URLSearchParams({key:config.key,loading:'async',callback:'initMap',v:'quarterly',language:'ja'});
+ script.onerror=()=>{status.textContent='地図を読み込めません。通信環境とAPIキーを確認してください。';status.hidden=false;};
+ document.head.append(script);
+};
+window.addEventListener('message',e=>{if(e.source===parent && e.origin===location.origin && e.data?.type==='osmo-map')window.osmoSetMapConfig(e.data.config);});
+document.getElementById('fit').addEventListener('click',fit);
+</script></body></html>

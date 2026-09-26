@@ -108,15 +108,36 @@
     }
     if(args.vibrate) navigator.vibrate?.(60);
   }
+  let storageDb;
+  async function storage(action,key,value) {
+    if(typeof indexedDB==='undefined') {
+      if(action==='get')return localStorage.getItem(`osmo360.${key}`);
+      if(action==='delete')return localStorage.removeItem(`osmo360.${key}`);
+      localStorage.setItem(`osmo360.${key}`,value);return;
+    }
+    if(!storageDb) storageDb=new Promise((resolve,reject)=>{
+      const request=indexedDB.open('osmo360-shutter',1);
+      request.onupgradeneeded=()=>request.result.createObjectStore('kv');
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>reject(request.error);
+      request.onblocked=()=>reject(Error('別のタブを閉じて再度お試しください'));
+    });
+    const db=await storageDb;
+    return new Promise((resolve,reject)=>{
+      const t=db.transaction('kv',action==='get'?'readonly':'readwrite'),store=t.objectStore('kv');
+      const r=action==='get'?store.get(key):action==='delete'?store.delete(key):store.put(value,key);
+      t.oncomplete=()=>resolve(r.result??null);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||Error('保存を中断しました'));
+    });
+  }
   const methods={
     capabilities,connect,write,
     disconnect:()=>{ device?.gatt?.disconnect(); },
     startSensors,stopSensors,
     keepAwake:async()=>{ if(document.visibilityState==='visible' && !wake) wake=await navigator.wakeLock?.request('screen'); },
     feedback,
-    load:({key})=>localStorage.getItem(`osmo360.${key}`),
-    save:({key,value})=>{ localStorage.setItem(`osmo360.${key}`,value); },
-    remove:({key})=>localStorage.removeItem(`osmo360.${key}`),
+    load:({key})=>storage('get',key),
+    save:({key,value})=>storage('put',key,value),
+    remove:({key})=>storage('delete',key),
     export:({name,content,mime})=>{
       const url=URL.createObjectURL(new Blob([content],{type:mime||'application/json'}));
       const a=document.createElement('a'); a.href=url; a.download=name; a.click();

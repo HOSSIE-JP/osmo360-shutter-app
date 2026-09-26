@@ -4,6 +4,7 @@ import '../core/controller.dart';
 import '../core/capture_engine.dart';
 import '../core/models.dart';
 import 'track_view.dart';
+import 'map_widget.dart';
 
 const muted=Color(0xff8e9eaf), surface=Color(0xff141d27), border=Color(0xff26323e);
 class ShutterApp extends StatelessWidget {
@@ -29,7 +30,7 @@ class Home extends StatefulWidget {
   @override State<Home> createState()=>_HomeState();
 }
 class _HomeState extends State<Home> with WidgetsBindingObserver {
-  int page=0; AppController get c=>widget.controller;
+  int page=0; bool showMap=true; AppController get c=>widget.controller;
   @override void initState(){super.initState();WidgetsBinding.instance.addObserver(this);}
   @override void dispose(){WidgetsBinding.instance.removeObserver(this);super.dispose();}
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -42,7 +43,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       if(wide) Container(width:94,height:double.infinity,decoration:const BoxDecoration(border:Border(right:BorderSide(color:border))),
         child:Column(children:[const SizedBox(height:24),const Icon(Icons.camera_rounded,color:cyan,size:32),const SizedBox(height:36),
           Expanded(child:NavigationRail(backgroundColor:Colors.transparent,selectedIndex:page,onDestinationSelected:(v)=>setState(()=>page=v),labelType:NavigationRailLabelType.all,
-            destinations:const [NavigationRailDestination(icon:Icon(Icons.radio_button_checked),label:Text('撮影')),NavigationRailDestination(icon:Icon(Icons.route_outlined),label:Text('軌跡')),NavigationRailDestination(icon:Icon(Icons.history_rounded),label:Text('履歴')),NavigationRailDestination(icon:Icon(Icons.tune_rounded),label:Text('設定'))]))])),
+            destinations:const [NavigationRailDestination(icon:Icon(Icons.radio_button_checked),label:Text('撮影')),NavigationRailDestination(icon:Icon(Icons.route_outlined),label:Text('軌跡')),NavigationRailDestination(icon:Icon(Icons.history_rounded),label:Text('プロジェクト')),NavigationRailDestination(icon:Icon(Icons.tune_rounded),label:Text('設定'))]))])),
       Expanded(child:SingleChildScrollView(padding:EdgeInsets.all(wide?32:18),child:Center(child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:1240),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         _header(wide),const SizedBox(height:24),
         if(c.error.isNotEmpty) _banner(c.error,Icons.info_outline,()=>setState(()=>c.error='')),
@@ -55,20 +56,20 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     ]));
     return Scaffold(body:body,bottomNavigationBar:wide?null:NavigationBar(selectedIndex:page,onDestinationSelected:(v)=>setState(()=>page=v),destinations:const [
       NavigationDestination(icon:Icon(Icons.radio_button_checked),label:'撮影'),NavigationDestination(icon:Icon(Icons.route_outlined),label:'軌跡'),
-      NavigationDestination(icon:Icon(Icons.history_rounded),label:'履歴'),NavigationDestination(icon:Icon(Icons.tune_rounded),label:'設定')]));
+      NavigationDestination(icon:Icon(Icons.history_rounded),label:'プロジェクト'),NavigationDestination(icon:Icon(Icons.tune_rounded),label:'設定')]));
   });
   Widget _header(bool wide)=>Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
     Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       const Text('OSMO 360',style:TextStyle(color:cyan,fontSize:11,fontWeight:FontWeight.w700,letterSpacing:3)),
-      const SizedBox(height:5),Text(['Walk. Stop. Capture.','Your walk, mapped.','Capture journal.','Make it your rhythm.'][page],style:TextStyle(fontSize:wide?30:25,fontWeight:FontWeight.w600,letterSpacing:-.8)),
-      const SizedBox(height:5),Text(['歩いて、止まって、360°を残す。','撮影ポイントと移動の軌跡。','撮影の記録を、手元に。','撮影の間隔と静止判定を調整。'][page],style:const TextStyle(color:muted,fontSize:12))])),
+      const SizedBox(height:5),Text(['Walk. Stop. Capture.','Your walk, mapped.','Your projects.','Make it your rhythm.'][page],style:TextStyle(fontSize:wide?30:25,fontWeight:FontWeight.w600,letterSpacing:-.8)),
+      const SizedBox(height:5),Text(['歩いて、止まって、360°を残す。','撮影ポイントと移動の軌跡。','プロジェクトごとに、撮影を記録。','撮影の間隔と静止判定を調整。'][page],style:const TextStyle(color:muted,fontSize:12))])),
     if(wide) const _StatusPill(Icons.circle,'前面利用',cyan),
     const SizedBox(width:10),IconButton(tooltip:'アプリをインストール',onPressed:c.install,icon:const Icon(Icons.install_mobile_outlined,color:muted)),
   ]);
   Widget _banner(String text,IconData icon,VoidCallback? close)=>Padding(padding:const EdgeInsets.only(bottom:16),child:Container(padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:const Color(0xff322a21),borderRadius:BorderRadius.circular(14)),child:Row(children:[Icon(icon,color:const Color(0xffffc77d),size:20),const SizedBox(width:10),Expanded(child:Text(text,style:const TextStyle(fontSize:12,color:Color(0xffffd9a9)))),if(close!=null)IconButton(onPressed:close,icon:const Icon(Icons.close,size:18))])));
   Widget panel(Widget child,{EdgeInsets padding=const EdgeInsets.all(22)})=>Card(child:Padding(padding:padding,child:child));
   Widget _capture(bool wide) {
-    final left=Column(children:[_cameraCard(),const SizedBox(height:18),_captureCard(),const SizedBox(height:18),_metrics()]);
+    final left=Column(children:[_projectSelector(),const SizedBox(height:18),_cameraCard(),const SizedBox(height:18),_captureCard(),const SizedBox(height:18),_metrics()]);
     final right=Column(children:[panel(TrackView(track:c.engine.track,shots:c.engine.shots,current:c.engine.fix)),const SizedBox(height:18),_sensorCard(),const SizedBox(height:18),_recent()]);
     if(wide)return Row(crossAxisAlignment:CrossAxisAlignment.start,children:[Expanded(flex:6,child:left),const SizedBox(width:22),Expanded(flex:5,child:right)]);
     return Column(children:[left,const SizedBox(height:18),right]);
@@ -128,24 +129,98 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     if(c.engine.shots.isEmpty) const Padding(padding:EdgeInsets.symmetric(vertical:22),child:Text('最初の1枚を待っています。',style:TextStyle(color:muted,fontSize:12)))
     else ...c.engine.shots.reversed.take(3).map(_shotRow),
   ]));
-  Widget _shotRow(Shot s)=>Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Row(children:[Container(width:34,height:34,alignment:Alignment.center,decoration:BoxDecoration(color:cyan.withValues(alpha:.08),borderRadius:BorderRadius.circular(10)),child:Text('${s.number.toString().padLeft(2,'0')}',style:const TextStyle(color:cyan,fontSize:12))),const SizedBox(width:12),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(s.label,style:const TextStyle(fontSize:12)),const SizedBox(height:3),Text('${_time(s.at)} · ${s.manual?'手動':'自動'} · ${s.fix==null?'GPSなし':'±${s.fix!.accuracy.toStringAsFixed(0)} m'}',style:const TextStyle(color:muted,fontSize:10))])),Icon(s.result==ShotResult.actionObserved?Icons.check_circle_outline:Icons.pending_outlined,size:18,color:s.result==ShotResult.actionObserved?const Color(0xffd5f7a5):const Color(0xffffc77d))]));
+  Widget _shotRow(Shot s)=>InkWell(onTap:()=>_shotDetails(s),borderRadius:BorderRadius.circular(12),child:Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Row(children:[Container(width:34,height:34,alignment:Alignment.center,decoration:BoxDecoration(color:cyan.withValues(alpha:.08),borderRadius:BorderRadius.circular(10)),child:Text('${s.number.toString().padLeft(2,'0')}',style:const TextStyle(color:cyan,fontSize:12))),const SizedBox(width:12),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(s.label,style:const TextStyle(fontSize:12)),const SizedBox(height:3),Text('${_time(s.at)} · ${s.manual?'手動':'自動'} · ${s.fix==null?'GPSなし':'±${s.fix!.accuracy.toStringAsFixed(0)} m'}',style:const TextStyle(color:muted,fontSize:10))])),Icon(s.result==ShotResult.actionObserved?Icons.check_circle_outline:Icons.pending_outlined,size:18,color:s.result==ShotResult.actionObserved?const Color(0xffd5f7a5):const Color(0xffffc77d))])));
   String _time(DateTime t)=>'${t.toLocal().hour.toString().padLeft(2,'0')}:${t.toLocal().minute.toString().padLeft(2,'0')}:${t.toLocal().second.toString().padLeft(2,'0')}';
-  Widget _route()=>Column(children:[panel(TrackView(track:c.engine.track,shots:c.engine.shots,current:c.engine.fix,large:true)),const SizedBox(height:18),panel(AltitudeChart(track:c.engine.track)),const SizedBox(height:18),_exports(null),const SizedBox(height:10),const Text('地図タイルを使わない相対座標表示。位置情報は端末内に保存します。',style:TextStyle(color:muted,fontSize:12))]);
+  Widget _route()=>Column(children:[
+    if(c.mapsApiKey.isNotEmpty)...[_mapCard(c.engine.track,c.engine.shots,c.engine.fix),const SizedBox(height:18)],
+    panel(TrackView(track:c.engine.track,shots:c.engine.shots,current:c.engine.fix,large:true)),const SizedBox(height:18),panel(AltitudeChart(track:c.engine.track)),const SizedBox(height:18),_exports(null),const SizedBox(height:10),const Text('APIキー未設定時は相対座標表示のみ。地図の表示時はGoogleへ表示位置を送ります。',style:TextStyle(color:muted,fontSize:12))]);
   Widget _exports(Map<String,dynamic>? data)=>Wrap(spacing:10,runSpacing:10,children:[for(final format in ['json','csv','gpx'])OutlinedButton.icon(onPressed:()=>c.export(data:data,format:format),icon:const Icon(Icons.file_download_outlined,size:18),label:Text('${format.toUpperCase()} 書き出し'))]);
   Widget _history()=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    _projectSelector(manage:true),const SizedBox(height:18),
     panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('現在のセッション',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),const SizedBox(height:8),const Text('「撮影動作を検知」は保存完了の保証ではありません。',style:TextStyle(color:muted,fontSize:11)),const SizedBox(height:14),_exports(null),const SizedBox(height:12),
       if(c.engine.shots.isEmpty) const Padding(padding:EdgeInsets.all(20),child:Text('まだ撮影要求はありません。',style:TextStyle(color:muted))) else ...c.engine.shots.reversed.take(100).map(_shotRow)])),
-    const SizedBox(height:22),const Text('保存したセッション',style:TextStyle(fontSize:18,fontWeight:FontWeight.w500)),const SizedBox(height:6),const Text('端末内に最新10件を保存。長期保存には書き出しをご利用ください。',style:TextStyle(color:muted,fontSize:11)),const SizedBox(height:14),
-    if(c.sessions.isEmpty) panel(const SizedBox(width:double.infinity,child:Text('セッション終了後にここへ保存されます。',style:TextStyle(color:muted))))
-    else ...c.sessions.map((s)=>Padding(padding:const EdgeInsets.only(bottom:12),child:panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    const SizedBox(height:22),const Text('保存したセッション',style:TextStyle(fontSize:18,fontWeight:FontWeight.w500)),const SizedBox(height:6),const Text('選択中のプロジェクト内のセッション。詳細から撮影地点・時刻・GPSを確認できます。',style:TextStyle(color:muted,fontSize:11)),const SizedBox(height:14),
+    if(c.projectSessions.isEmpty) panel(const SizedBox(width:double.infinity,child:Text('セッション終了後にここへ保存されます。',style:TextStyle(color:muted))))
+    else ...c.projectSessions.map((s)=>Padding(padding:const EdgeInsets.only(bottom:12),child:panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       Row(children:[Expanded(child:Text('${s['demo']==true?'DEMO · ':''}${s['id']}',style:const TextStyle(fontSize:13,fontWeight:FontWeight.w600))),IconButton(tooltip:'履歴を削除',onPressed:()async{final yes=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:const Text('この履歴を削除しますか？'),content:const Text('書き出していない記録は復元できません。'),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('キャンセル')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('削除'))]));if(yes==true)await c.deleteSession(s['id']);},icon:const Icon(Icons.delete_outline,size:18,color:muted))]),
-      Text('${(s['shots'] as List?)?.length??0} 回の要求 · ${s['steps']??0} 歩${s['interrupted']==true?' · 中断から復元':''}',style:const TextStyle(color:muted,fontSize:11)),const SizedBox(height:12),_exports(s),
+      Text('${(s['shots'] as List?)?.length??0} 回の要求 · ${s['steps']??0} 歩${s['interrupted']==true?' · 中断から復元':''}',style:const TextStyle(color:muted,fontSize:11)),const SizedBox(height:12),OutlinedButton.icon(onPressed:()=>_sessionDetails(s),icon:const Icon(Icons.open_in_new,size:18),label:const Text('撮影詳細・軌跡を見る')),const SizedBox(height:12),_exports(s),
     ])))),
     const SizedBox(height:20),panel(ExpansionTile(tilePadding:EdgeInsets.zero,title:const Text('通信・動作ログ',style:TextStyle(fontSize:16)),subtitle:Text('CRCエラー ${c.decoder.rejected} · 最新 ${c.logs.length} 件',style:const TextStyle(fontSize:11,color:muted)),children:[SizedBox(height:280,child:ListView.builder(itemCount:math.min(100,c.logs.length),itemBuilder:(context,index){final item=c.logs[c.logs.length-1-index];return Padding(padding:const EdgeInsets.symmetric(vertical:5),child:SelectableText('${item['elapsedMs']}  ${item['kind']}  ${item['message']}',style:const TextStyle(fontFamily:'monospace',fontSize:10,color:muted)));}))])),
   ]);
   void _change(void Function() action){if(c.engine.active&&!c.engine.paused)c.engine.pause('設定を変更しました。再開してください');action();c.saveSettings();setState((){});}
   Widget _slider(String title,String help,double value,double min,double max,int divisions,String unit,void Function(double) setter)=>Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Row(children:[Expanded(child:Text(title,style:const TextStyle(fontSize:14))),Text('${value.toStringAsFixed(2)} $unit',style:const TextStyle(color:cyan,fontSize:13,fontWeight:FontWeight.w600))]),const SizedBox(height:4),Text(help,style:const TextStyle(fontSize:11,color:muted)),Slider(value:value.clamp(min,max),min:min,max:max,divisions:divisions,onChanged:(v)=>_change(()=>setter(v)))]));
+
+  Widget _projectSelector({bool manage=false})=>panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    Row(children:[const Icon(Icons.folder_outlined,color:cyan,size:20),const SizedBox(width:10),const Expanded(child:Text('撮影プロジェクト',style:TextStyle(fontSize:15,fontWeight:FontWeight.w600))),
+      IconButton(tooltip:'新規プロジェクト',onPressed:c.engine.active?null:()=>_projectDialog(),icon:const Icon(Icons.create_new_folder_outlined,size:20))]),
+    const SizedBox(height:8),DropdownButtonFormField<String>(key:ValueKey(c.selectedProjectId),initialValue:c.selectedProjectId.isEmpty?null:c.selectedProjectId,isExpanded:true,
+      decoration:const InputDecoration(border:OutlineInputBorder(),contentPadding:EdgeInsets.symmetric(horizontal:12,vertical:12)),
+      hint:const Text('プロジェクトを作成してください'),items:c.projects.map((p)=>DropdownMenuItem<String>(value:p['id'],child:Text(p['name'],overflow:TextOverflow.ellipsis))).toList(),
+      onChanged:c.engine.active?null:(id){if(id!=null)c.selectProject(id);}),
+    if(manage&&c.selectedProjectId.isNotEmpty)...[
+      const SizedBox(height:10),Text(c.projects.firstWhere((p)=>p['id']==c.selectedProjectId)['description']??'',style:const TextStyle(fontSize:12,color:muted)),
+      const SizedBox(height:8),Text('${c.projectSessions.length} セッション · ${c.projectSessions.fold<int>(0,(sum,s)=>sum+((s['shots'] as List?)?.length??0))} 撮影要求',style:const TextStyle(color:cyan,fontSize:12)),
+      const SizedBox(height:12),Wrap(spacing:8,runSpacing:8,children:[
+        OutlinedButton.icon(onPressed:()=>_projectDialog(edit:true),icon:const Icon(Icons.edit_outlined,size:18),label:const Text('編集')),
+        OutlinedButton.icon(onPressed:c.exportProject,icon:const Icon(Icons.file_download_outlined,size:18),label:const Text('全体を書き出し')),
+        OutlinedButton.icon(onPressed:c.engine.active?null:_deleteProject,icon:const Icon(Icons.delete_outline,size:18),label:const Text('削除'))]),
+    ],
+    if(c.engine.active)const Padding(padding:EdgeInsets.only(top:10),child:Text('プロジェクトの切り替えはセッション終了後に行えます。',style:TextStyle(fontSize:10,color:muted))),
+  ]));
+  Future<void> _projectDialog({bool edit=false})async{
+    final project=edit?c.projects.firstWhere((p)=>p['id']==c.selectedProjectId):null;
+    final name=TextEditingController(text:project?['name']??''),description=TextEditingController(text:project?['description']??'');
+    final accepted=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:Text(edit?'プロジェクトを編集':'新規プロジェクト'),content:SizedBox(width:420,child:Column(mainAxisSize:MainAxisSize.min,children:[
+      TextField(controller:name,maxLength:80,autofocus:true,decoration:const InputDecoration(labelText:'プロジェクト名')),
+      const SizedBox(height:12),TextField(controller:description,maxLength:500,maxLines:3,decoration:const InputDecoration(labelText:'説明・メモ'))])),actions:[
+      TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('キャンセル')),FilledButton(onPressed:(){if(name.text.trim().isNotEmpty)Navigator.pop(ctx,true);},child:const Text('保存'))]));
+    if(accepted==true){if(edit){await c.editProject(c.selectedProjectId,name.text,description.text);}else{await c.createProject(name.text,description.text);}}
+    name.dispose();description.dispose();
+  }
+  Future<void> _deleteProject()async{
+    final accepted=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:Text('「${c.projectName}」を削除？'),content:const Text('このプロジェクト内の全セッションと撮影・GPS履歴を削除します。必要な場合は先に書き出してください。'),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('キャンセル')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('プロジェクトを削除'))]));
+    if(accepted==true)await c.deleteProject(c.selectedProjectId);
+  }
+  Future<void> _mapKeyDialog()async{
+    final keyController=TextEditingController(text:c.mapsApiKey);
+    final accepted=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Google Maps APIキー'),content:SizedBox(width:440,child:TextField(controller:keyController,obscureText:true,autocorrect:false,enableSuggestions:false,decoration:const InputDecoration(labelText:'Maps JavaScript API key',helperText:'空欄で保存すると地図を無効化します'))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('キャンセル')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('保存'))]));
+    if(accepted==true)await c.saveMapKey(keyController.text);keyController.dispose();
+  }
+  Widget _mapCard(List<GeoFix> track,List<Shot> shots,GeoFix? current)=>panel(Column(children:[
+    SwitchListTile(contentPadding:EdgeInsets.zero,title:const Text('Googleマップ',style:TextStyle(fontSize:16,fontWeight:FontWeight.w600)),subtitle:const Text('通信・APIキーが必要です',style:TextStyle(fontSize:11,color:muted)),value:showMap,onChanged:(v)=>setState(()=>showMap=v)),
+    if(showMap)GoogleMapPanel(key:ValueKey(c.mapsApiKey),config:{'key':c.mapsApiKey,'track':track.map((p)=>p.toJson()).toList(),'shots':shots.map((p)=>p.toJson()).toList(),'current':current?.toJson()}),
+  ]));
+  Future<void> _shotDetails(Shot shot)async{
+    final f=shot.fix;
+    await showDialog<void>(context:context,builder:(ctx)=>AlertDialog(title:Text('撮影 #${shot.number}'),content:SingleChildScrollView(child:SelectableText([
+      '状態: ${shot.label}', '要求時刻: ${shot.at.toLocal()}', 'UTC: ${shot.at.toIso8601String()}',
+      '操作: ${shot.manual?'手動':'自動'}', 'カメラ応答: ${shot.acknowledged?'要求を受理':'未確認'}',
+      '緯度: ${f?.lat.toStringAsFixed(7)??'—'}', '経度: ${f?.lon.toStringAsFixed(7)??'—'}',
+      '水平精度: ${f?.accuracy.toStringAsFixed(1)??'—'} m', '高度: ${f?.altitude?.toStringAsFixed(1)??'—'} m',
+      '垂直精度: ${f?.verticalAccuracy?.toStringAsFixed(1)??'—'} m', '高度基準: ${f?.altitudeReference??'—'}',
+      '測位時刻: ${f?.time.toIso8601String()??'—'}', if(shot.note.isNotEmpty)'注記: ${shot.note}',
+      '画像ファイルの保存・GPS埋め込みは実画像で確認してください。',
+    ].join('\n'),style:const TextStyle(fontSize:13,height:1.9))),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('閉じる'))]));
+  }
+  Future<void> _sessionDetails(Map<String,dynamic> data)async{
+    final shots=(data['shots'] as List? ?? []).map((s)=>Shot.fromJson(Map<String,dynamic>.from(s))).toList();
+    final track=(data['track'] as List? ?? []).map((p)=>GeoFix.fromJson(Map<String,dynamic>.from(p),0)).whereType<GeoFix>().toList();
+    final observed=shots.where((s)=>s.result==ShotResult.actionObserved).length;
+    await showDialog<void>(context:context,builder:(ctx)=>Dialog(child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:800),child:SingleChildScrollView(padding:const EdgeInsets.all(22),child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[
+      Row(children:[const Expanded(child:Text('セッション詳細',style:TextStyle(fontSize:20,fontWeight:FontWeight.w600))),IconButton(onPressed:()=>Navigator.pop(ctx),icon:const Icon(Icons.close))]),
+      Text(data['id']??'',style:const TextStyle(fontSize:12,color:muted)),const SizedBox(height:12),
+      Text('撮影要求 ${shots.length} 回 · 撮影動作検知 $observed 回 · ${data['steps']??0} 歩',style:const TextStyle(fontSize:13,color:cyan)),const SizedBox(height:20),
+      TrackView(track:track,shots:shots,large:true),const SizedBox(height:20),AltitudeChart(track:track),const SizedBox(height:16),_exports(data),const SizedBox(height:16),
+      ...shots.map(_shotRow),
+    ])))));
+  }
+
   Widget _settings()=>Column(children:[
+    panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('地図APIキー',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),const SizedBox(height:10),
+      const Text('Google Maps JavaScript APIのキーを設定すると地図を表示できます。未入力でも2D／3Dの相対座標・撮影履歴は利用できます。',style:TextStyle(fontSize:12,color:muted,height:1.7)),const SizedBox(height:14),
+      Row(children:[Expanded(child:Text(c.mapsApiKey.isEmpty?'APIキー未設定':'APIキー設定済み',style:const TextStyle(color:cyan,fontSize:13))),OutlinedButton(onPressed:_mapKeyDialog,child:const Text('キーを設定'))]),
+      const SizedBox(height:10),const Text('キーは端末内に保存し、ログ・プロジェクト書き出しには含めません。Google Cloudで課金・Maps JavaScript APIを有効にし、使用元を hossie-jp.github.io に制限してください。',style:TextStyle(fontSize:11,color:muted,height:1.7)),
+    ])),const SizedBox(height:18),
     panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('撮影のリズム',style:TextStyle(fontSize:18,fontWeight:FontWeight.w600)),const SizedBox(height:10),
       _slider('撮影間隔','歩数 × 歩幅で推定します',c.settings.intervalM,.5,20,39,'m',(v)=>c.settings.intervalM=v),
       _slider('最小クールダウン','カメラの処理待ちは別に確認します',c.settings.cooldownSeconds,1,30,58,'秒',(v)=>c.settings.cooldownSeconds=v),

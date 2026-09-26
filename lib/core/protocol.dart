@@ -111,6 +111,6 @@ class CameraStatus {
     final d = ByteData.sublistView(b);
     return CameraStatus(mode:b[0], state:b[1], battery:b[37],
       capacityMb:d.getUint32(15, Endian.little), remainingPhotos:d.getUint32(19, Endian.little),
-      power:b[28], temperature:b[30], countdownMs:d.getUint32(31, Endian.little), receivedAt:now);
+      power:b[28], temperature:b[30], countdownMs:d.getUint16(9, Endian.little)*1000, receivedAt:now);
   }
 }
