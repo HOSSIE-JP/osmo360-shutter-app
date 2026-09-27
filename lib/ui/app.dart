@@ -1195,6 +1195,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(edit ? 'プロジェクトを編集' : '新規プロジェクト'),
+        scrollable: true,
         content: SizedBox(
           width: 420,
           child: Column(

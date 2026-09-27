@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:osmo360_shutter_app/core/controller.dart';
 import 'package:osmo360_shutter_app/core/models.dart';
