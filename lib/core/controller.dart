@@ -65,6 +65,7 @@ class AppController extends ChangeNotifier {
     if (_lastGpsSent == null || now - _lastGpsSent! > 3000) return 'GPS送信確認待ち';
     return 'カメラへGPS送信中 · 1秒間隔';
   }
+
   Future<void> initialize() async {
     _subscription = bridge.events.listen(
       _event,
@@ -512,16 +513,20 @@ class AppController extends ChangeNotifier {
                 0x17,
                 nextSequence(),
                 0,
-                gpsPayload(
-                  fix,
-                  timeOffsetHours: settings.gpsTimeOffset,
-                ),
+                gpsPayload(fix, timeOffsetHours: settings.gpsTimeOffset),
               ),
-              allowed: () => engine.active && !engine.paused && engine.visible &&
-                  engine.authorized && settings.forwardGps &&
-                  !engine.gpsUnavailable && fix.usable(now, utc, settings),
+              allowed: () =>
+                  engine.active &&
+                  !engine.paused &&
+                  engine.visible &&
+                  engine.authorized &&
+                  settings.forwardGps &&
+                  !engine.gpsUnavailable &&
+                  fix.usable(now, utc, settings),
             )
-            .then<void>((_) { _lastGpsSent = now; })
+            .then<void>((_) {
+              _lastGpsSent = now;
+            })
             .catchError((Object e) => log('error', 'GPS送信: $e'))
             .whenComplete(() => _gpsSending = false),
       );

@@ -398,24 +398,43 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           ],
         ),
         const SizedBox(height: 16),
-        LayoutBuilder(builder: (context, constraints) {
-          final connectButton = OutlinedButton.icon(
-            onPressed: c.connecting ? null : () => c.connect(reconnect: true),
-            icon: const Icon(Icons.bluetooth_rounded, size: 18),
-            label: Text(c.connecting ? '接続中…' : c.engine.authorized ? '再接続' : 'カメラを接続'),
-          );
-          final modeButton = OutlinedButton.icon(
-            onPressed: c.engine.authorized && !c.demo ? c.photoMode : null,
-            icon: const Icon(Icons.panorama_photosphere_outlined, size: 18),
-            label: const Text('写真モード'),
-          );
-          if (constraints.maxWidth < 300) {
-            return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [connectButton, const SizedBox(height: 8), modeButton]);
-          }
-          return Row(children: [Expanded(child: connectButton),
-            const SizedBox(width: 10), Expanded(child: modeButton)]);
-        }),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final connectButton = OutlinedButton.icon(
+              onPressed: c.connecting ? null : () => c.connect(reconnect: true),
+              icon: const Icon(Icons.bluetooth_rounded, size: 18),
+              label: Text(
+                c.connecting
+                    ? '接続中…'
+                    : c.engine.authorized
+                    ? '再接続'
+                    : 'カメラを接続',
+              ),
+            );
+            final modeButton = OutlinedButton.icon(
+              onPressed: c.engine.authorized && !c.demo ? c.photoMode : null,
+              icon: const Icon(Icons.panorama_photosphere_outlined, size: 18),
+              label: const Text('写真モード'),
+            );
+            if (constraints.maxWidth < 300) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  connectButton,
+                  const SizedBox(height: 8),
+                  modeButton,
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: connectButton),
+                const SizedBox(width: 10),
+                Expanded(child: modeButton),
+              ],
+            );
+          },
+        ),
         if (c.modeDescription.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 12),
@@ -492,10 +511,16 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         children: [
           Row(
             children: [
-              const Expanded(child: Text(
-                'CAPTURE SESSION',
-                style: TextStyle(fontSize: 10, letterSpacing: 2, color: muted),
-              )),
+              const Expanded(
+                child: Text(
+                  'CAPTURE SESSION',
+                  style: TextStyle(
+                    fontSize: 10,
+                    letterSpacing: 2,
+                    color: muted,
+                  ),
+                ),
+              ),
               const SizedBox(width: 8),
               _StatusPill(
                 Icons.circle,
@@ -1073,7 +1098,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           min: min,
           max: max,
           divisions: divisions,
-          semanticFormatterCallback: (v) => '$title ${v.toStringAsFixed(2)} $unit',
+          semanticFormatterCallback: (v) =>
+              '$title ${v.toStringAsFixed(2)} $unit',
           onChanged: (v) => _change(() => setter(v)),
         ),
       ],
@@ -1180,14 +1206,26 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     final project = edit ? c.projects.firstWhere((p) => p['id'] == id) : null;
     final draft = await showDialog<ProjectDraft>(
       context: context,
-      builder: (_) => ProjectEditorDialog(edit: edit, initial: project == null ? null :
-        (name: project['name'] as String, description: project['description'] as String? ?? '')),
+      builder: (_) => ProjectEditorDialog(
+        edit: edit,
+        initial: project == null
+            ? null
+            : (
+                name: project['name'] as String,
+                description: project['description'] as String? ?? '',
+              ),
+      ),
     );
     if (draft == null || !mounted) return;
     try {
-      if (edit) { await c.editProject(id, draft.name, draft.description); }
-      else { await c.createProject(draft.name, draft.description); }
-    } catch (e) { c.fail('プロジェクトの保存に失敗しました: $e'); }
+      if (edit) {
+        await c.editProject(id, draft.name, draft.description);
+      } else {
+        await c.createProject(draft.name, draft.description);
+      }
+    } catch (e) {
+      c.fail('プロジェクトの保存に失敗しました: $e');
+    }
   }
 
   Future<void> _deleteProject() async {
@@ -1214,11 +1252,16 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Future<void> _mapKeyDialog() async {
-    final key = await showDialog<String>(context: context,
-      builder: (_) => MapKeyDialog(initialKey: c.mapsApiKey));
+    final key = await showDialog<String>(
+      context: context,
+      builder: (_) => MapKeyDialog(initialKey: c.mapsApiKey),
+    );
     if (key == null || !mounted) return;
-    try { await c.saveMapKey(key); }
-    catch (e) { c.fail('地図APIキーを保存できませんでした: $e'); }
+    try {
+      await c.saveMapKey(key);
+    } catch (e) {
+      c.fail('地図APIキーを保存できませんでした: $e');
+    }
   }
 
   Widget _mapCard(List<GeoFix> track, List<Shot> shots, GeoFix? current) =>

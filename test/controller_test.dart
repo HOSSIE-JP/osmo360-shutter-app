@@ -35,7 +35,8 @@ class MemoryBridge implements DeviceBridge {
       case 'write':
         writes++;
         packets.add(List<int>.from(args['bytes']));
-        if (writeStarted != null && !writeStarted!.isCompleted) writeStarted!.complete();
+        if (writeStarted != null && !writeStarted!.isCompleted)
+          writeStarted!.complete();
         if (writeGate != null) await writeGate!.future;
       case 'export':
         exports.add(Map.from(args));
@@ -143,32 +144,54 @@ void main() {
       expect(b.saved.containsKey('current'), isFalse);
     },
   );
-  test('GPS queued behind a command is cancelled when the session pauses', () async {
-    final (c, b) = await setup();
-    c.engine.connected = true;
-    c.engine.authorized = true;
-    await c.startSession();
-    b.writeStarted = Completer<void>();
-    b.writeGate = Completer<void>();
-    final modeChange = c.photoMode();
-    await b.writeStarted!.future;
-    c.engine.location(GeoFix(lat:0, lon:0, accuracy:3, altitude:10,
-      time:c.utc, receivedAt:c.now), c.now, c.utc);
-    await Future<void>.delayed(const Duration(milliseconds:220));
-    c.engine.pause('test pause');
-    b.writeGate!.complete();
-    final request = FrameDecoder().add(b.packets.single).single;
-    b.stream.add({'type':'bytes','bytes':Frame(0x1d,4,request.sequence,0x20,
-      Uint8List.fromList([0])).encode().toList()});
-    await modeChange;
-    await Future<void>.delayed(const Duration(milliseconds:120));
-    expect(b.writes,1,reason:'Only the mode command may reach the device');
-    expect(c.gpsForwardingStatus, contains('一時停止'));
-  });
+  test(
+    'GPS queued behind a command is cancelled when the session pauses',
+    () async {
+      final (c, b) = await setup();
+      c.engine.connected = true;
+      c.engine.authorized = true;
+      await c.startSession();
+      b.writeStarted = Completer<void>();
+      b.writeGate = Completer<void>();
+      final modeChange = c.photoMode();
+      await b.writeStarted!.future;
+      c.engine.location(
+        GeoFix(
+          lat: 0,
+          lon: 0,
+          accuracy: 3,
+          altitude: 10,
+          time: c.utc,
+          receivedAt: c.now,
+        ),
+        c.now,
+        c.utc,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+      c.engine.pause('test pause');
+      b.writeGate!.complete();
+      final request = FrameDecoder().add(b.packets.single).single;
+      b.stream.add({
+        'type': 'bytes',
+        'bytes': Frame(
+          0x1d,
+          4,
+          request.sequence,
+          0x20,
+          Uint8List.fromList([0]),
+        ).encode().toList(),
+      });
+      await modeChange;
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(b.writes, 1, reason: 'Only the mode command may reach the device');
+      expect(c.gpsForwardingStatus, contains('一時停止'));
+    },
+  );
   test('demo and stopped sessions never claim GPS transmission', () async {
     final (c, _) = await setup();
     expect(c.gpsForwardingStatus, 'GPS送信停止中');
-    await c.enableDemo(); await c.startSession();
+    await c.enableDemo();
+    await c.startSession();
     expect(c.gpsForwardingStatus, contains('実機へのGPS送信なし'));
     await c.stopSession();
     expect(c.gpsForwardingStatus, isNot(contains('GPS送信中')));
