@@ -41,6 +41,8 @@ void main() {
       await c.createProject('初期プロジェクト','');
       await tester.pumpWidget(ShutterApp(controller:c));
       await tester.tap(find.byTooltip('新規プロジェクト'));await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));await tester.pumpAndSettle();
+      expect(find.text('プロジェクト名を入力してください'),findsOneWidget);
       await tester.enterText(find.byType(TextField).first,'画面確認プロジェクト');
       await tester.enterText(find.byType(TextField).last,'合成データ');
       await tester.tap(find.text('保存'));await tester.pumpAndSettle();
@@ -72,5 +74,18 @@ void main() {
     expect(tester.takeException(),isNull);
     await tester.tap(find.text('キャンセル'));await tester.pumpAndSettle();
     expect(c.projects,hasLength(1));expect(tester.takeException(),isNull);
+  });
+  testWidgets('map key can be saved, cancelled and cleared without disposed input errors', (tester) async {
+    final c=AppController(FakeBridge());addTearDown(c.dispose);
+    await tester.pumpWidget(ShutterApp(controller:c));
+    await tester.tap(find.text('設定').last);await tester.pumpAndSettle();
+    for (final operation in ['save','cancel','clear']) {
+      await tester.tap(find.text('キーを設定'));await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), operation=='clear'?'':'test-$operation');
+      await tester.tap(find.text(operation=='cancel'?'キャンセル':'保存'));
+      await tester.pumpAndSettle();
+      expect(c.mapsApiKey,operation=='clear'?'':'test-save');
+      expect(tester.takeException(),isNull);
+    }
   });
 }

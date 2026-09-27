@@ -5,6 +5,7 @@ import '../core/capture_engine.dart';
 import '../core/models.dart';
 import 'track_view.dart';
 import 'map_widget.dart';
+import 'edit_dialogs.dart';
 
 const muted = Color(0xff8e9eaf),
     surface = Color(0xff141d27),
@@ -1184,62 +1185,18 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     ),
   );
   Future<void> _projectDialog({bool edit = false}) async {
-    final project = edit
-        ? c.projects.firstWhere((p) => p['id'] == c.selectedProjectId)
-        : null;
-    final name = TextEditingController(text: project?['name'] ?? ''),
-        description = TextEditingController(
-          text: project?['description'] ?? '',
-        );
-    final accepted = await showDialog<bool>(
+    final id = c.selectedProjectId;
+    final project = edit ? c.projects.firstWhere((p) => p['id'] == id) : null;
+    final draft = await showDialog<ProjectDraft>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(edit ? 'プロジェクトを編集' : '新規プロジェクト'),
-        scrollable: true,
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                maxLength: 80,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'プロジェクト名'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: description,
-                maxLength: 500,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: '説明・メモ'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (name.text.trim().isNotEmpty) Navigator.pop(ctx, true);
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+      builder: (_) => ProjectEditorDialog(edit: edit, initial: project == null ? null :
+        (name: project['name'] as String, description: project['description'] as String? ?? '')),
     );
-    if (accepted == true) {
-      if (edit) {
-        await c.editProject(c.selectedProjectId, name.text, description.text);
-      } else {
-        await c.createProject(name.text, description.text);
-      }
-    }
-    name.dispose();
-    description.dispose();
+    if (draft == null || !mounted) return;
+    try {
+      if (edit) { await c.editProject(id, draft.name, draft.description); }
+      else { await c.createProject(draft.name, draft.description); }
+    } catch (e) { c.fail('プロジェクトの保存に失敗しました: $e'); }
   }
 
   Future<void> _deleteProject() async {
@@ -1266,38 +1223,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Future<void> _mapKeyDialog() async {
-    final keyController = TextEditingController(text: c.mapsApiKey);
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Google Maps APIキー'),
-        content: SizedBox(
-          width: 440,
-          child: TextField(
-            controller: keyController,
-            obscureText: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            decoration: const InputDecoration(
-              labelText: 'Maps JavaScript API key',
-              helperText: '空欄で保存すると地図を無効化します',
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-    if (accepted == true) await c.saveMapKey(keyController.text);
-    keyController.dispose();
+    final key = await showDialog<String>(context: context,
+      builder: (_) => MapKeyDialog(initialKey: c.mapsApiKey));
+    if (key == null || !mounted) return;
+    try { await c.saveMapKey(key); }
+    catch (e) { c.fail('地図APIキーを保存できませんでした: $e'); }
   }
 
   Widget _mapCard(List<GeoFix> track, List<Shot> shots, GeoFix? current) =>
