@@ -492,11 +492,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         children: [
           Row(
             children: [
-              const Text(
+              const Expanded(child: Text(
                 'CAPTURE SESSION',
                 style: TextStyle(fontSize: 10, letterSpacing: 2, color: muted),
-              ),
-              const Spacer(),
+              )),
+              const SizedBox(width: 8),
               _StatusPill(
                 Icons.circle,
                 e.active ? (e.paused ? 'PAUSED' : 'LIVE') : 'STANDBY',
