@@ -5,7 +5,8 @@ import json
 
 root = Path('build/web')
 files = sorted(p.relative_to(root).as_posix() for p in root.rglob('*')
-               if p.is_file() and p.name not in ('sw.js', 'flutter_service_worker.js')
+               if p.is_file() and not any(part.startswith('.') for part in p.relative_to(root).parts)
+               and p.name not in ('sw.js', 'flutter_service_worker.js')
                and not p.name.endswith('.map'))
 version = hashlib.sha256(b''.join((root / p).read_bytes() for p in files)).hexdigest()[:16]
 script = r'''
