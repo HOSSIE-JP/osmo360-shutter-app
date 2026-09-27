@@ -49,22 +49,39 @@ class FrameDecoder {
     for (final byte in chunk) {
       _buffer.add(byte & 255);
       while (_buffer.isNotEmpty) {
-        if (_buffer.first != 0xaa) { _buffer.removeAt(0); continue; }
+        if (_buffer.first != 0xaa) {
+          _buffer.removeAt(0);
+          continue;
+        }
         if (_buffer.length < 12) break;
         final length = _buffer[1] | (_buffer[2] << 8);
         final headerCrc = _buffer[10] | (_buffer[11] << 8);
-        if (length < 18 || length > 1023 || _buffer[4] != 0 ||
+        if (length < 18 ||
+            length > 1023 ||
+            _buffer[4] != 0 ||
             crc16(_buffer.take(10)) != headerCrc) {
-          rejected++; _buffer.removeAt(0); continue;
+          rejected++;
+          _buffer.removeAt(0);
+          continue;
         }
         if (_buffer.length < length) break;
         final bytes = Uint8List.fromList(_buffer.take(length).toList());
         final d = ByteData.sublistView(bytes);
-        if (crc32(bytes.take(length - 4)) != d.getUint32(length - 4, Endian.little)) {
-          rejected++; _buffer.removeAt(0); continue;
+        if (crc32(bytes.take(length - 4)) !=
+            d.getUint32(length - 4, Endian.little)) {
+          rejected++;
+          _buffer.removeAt(0);
+          continue;
         }
-        frames.add(Frame(bytes[12], bytes[13], d.getUint16(8, Endian.little),
-            bytes[3], Uint8List.sublistView(bytes, 14, length - 4)));
+        frames.add(
+          Frame(
+            bytes[12],
+            bytes[13],
+            d.getUint16(8, Endian.little),
+            bytes[3],
+            Uint8List.sublistView(bytes, 14, length - 4),
+          ),
+        );
         _buffer.removeRange(0, length);
       }
     }
@@ -72,7 +89,11 @@ class FrameDecoder {
   }
 }
 
-Uint8List connectionPayload(List<int> identity, int code, {bool paired = false}) {
+Uint8List connectionPayload(
+  List<int> identity,
+  int code, {
+  bool paired = false,
+}) {
   if (identity.length != 6) throw ArgumentError('6-byte identity required');
   final b = Uint8List(33);
   final d = ByteData.sublistView(b);
@@ -98,19 +119,48 @@ Uint8List photoModePayload(int cameraId) {
 }
 
 class CameraStatus {
-  const CameraStatus({required this.mode, required this.state, required this.battery,
-    required this.remainingPhotos, required this.capacityMb, required this.temperature,
-    required this.power, required this.countdownMs, required this.receivedAt});
-  final int mode, state, battery, remainingPhotos, capacityMb, temperature, power, countdownMs;
+  const CameraStatus({
+    required this.mode,
+    required this.state,
+    required this.battery,
+    required this.remainingPhotos,
+    required this.capacityMb,
+    required this.temperature,
+    required this.power,
+    required this.countdownMs,
+    required this.receivedAt,
+  });
+  final int mode,
+      state,
+      battery,
+      remainingPhotos,
+      capacityMb,
+      temperature,
+      power,
+      countdownMs;
   final int receivedAt;
   bool get busy => state == 3 || countdownMs > 0;
-  bool get ready => mode == 0x3f && state == 1 && power == 0 &&
-      temperature < 2 && remainingPhotos > 0 && capacityMb > 0 && countdownMs == 0;
+  bool get ready =>
+      mode == 0x3f &&
+      state == 1 &&
+      power == 0 &&
+      temperature < 2 &&
+      remainingPhotos > 0 &&
+      capacityMb > 0 &&
+      countdownMs == 0;
   static CameraStatus? parse(Uint8List b, int now) {
     if (b.length < 38) return null;
     final d = ByteData.sublistView(b);
-    return CameraStatus(mode:b[0], state:b[1], battery:b[37],
-      capacityMb:d.getUint32(15, Endian.little), remainingPhotos:d.getUint32(19, Endian.little),
-      power:b[28], temperature:b[30], countdownMs:d.getUint16(9, Endian.little)*1000, receivedAt:now);
+    return CameraStatus(
+      mode: b[0],
+      state: b[1],
+      battery: b[37],
+      capacityMb: d.getUint32(15, Endian.little),
+      remainingPhotos: d.getUint32(19, Endian.little),
+      power: b[28],
+      temperature: b[30],
+      countdownMs: d.getUint16(9, Endian.little) * 1000,
+      receivedAt: now,
+    );
   }
 }

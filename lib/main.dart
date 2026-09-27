@@ -5,7 +5,7 @@ import 'ui/app.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final controller=AppController(createBridge());
-  runApp(ShutterApp(controller:controller));
+  final controller = AppController(createBridge());
+  runApp(ShutterApp(controller: controller));
   controller.initialize();
 }
