@@ -398,33 +398,24 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           ],
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: c.connecting
-                    ? null
-                    : () => c.connect(reconnect: true),
-                icon: const Icon(Icons.bluetooth_rounded, size: 18),
-                label: Text(
-                  c.connecting
-                      ? '接続中…'
-                      : c.engine.authorized
-                      ? '再接続'
-                      : 'カメラを接続',
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: c.engine.authorized && !c.demo ? c.photoMode : null,
-                icon: const Icon(Icons.panorama_photosphere_outlined, size: 18),
-                label: const Text('写真モード'),
-              ),
-            ),
-          ],
-        ),
+        LayoutBuilder(builder: (context, constraints) {
+          final connectButton = OutlinedButton.icon(
+            onPressed: c.connecting ? null : () => c.connect(reconnect: true),
+            icon: const Icon(Icons.bluetooth_rounded, size: 18),
+            label: Text(c.connecting ? '接続中…' : c.engine.authorized ? '再接続' : 'カメラを接続'),
+          );
+          final modeButton = OutlinedButton.icon(
+            onPressed: c.engine.authorized && !c.demo ? c.photoMode : null,
+            icon: const Icon(Icons.panorama_photosphere_outlined, size: 18),
+            label: const Text('写真モード'),
+          );
+          if (constraints.maxWidth < 300) {
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [connectButton, const SizedBox(height: 8), modeButton]);
+          }
+          return Row(children: [Expanded(child: connectButton),
+            const SizedBox(width: 10), Expanded(child: modeButton)]);
+        }),
         if (c.modeDescription.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 12),

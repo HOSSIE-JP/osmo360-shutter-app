@@ -62,6 +62,9 @@ void main() {
     });
   }
   testWidgets('project input stays usable above the mobile keyboard', (tester) async {
+    final previousErrorHandler=FlutterError.onError;
+    FlutterError.onError=(details){debugPrint(details.toString());previousErrorHandler?.call(details);};
+    addTearDown(()=>FlutterError.onError=previousErrorHandler);
     tester.view.physicalSize=const Size(360,640);tester.view.devicePixelRatio=1;
     addTearDown(tester.view.resetPhysicalSize);addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetViewInsets);
